@@ -13,9 +13,8 @@ CORS(app)
 model_dict = pickle.load(open('model.p', 'rb'))
 model = model_dict['model']
 
-# MediaPipe (static mode since we get individual frames)
+# New mediapipe API
 mp_hands = mp.solutions.hands
-mp_drawing = mp.solutions.drawing_utils
 hands = mp_hands.Hands(static_image_mode=True, max_num_hands=2, min_detection_confidence=0.3)
 
 MAX_LEN = 84
@@ -30,11 +29,9 @@ def predict():
     if not data or 'image' not in data:
         return jsonify({'error': 'No image provided'}), 400
 
-    # Decode base64 image from browser
     img_data = base64.b64decode(data['image'].split(',')[1])
     np_arr = np.frombuffer(img_data, np.uint8)
     frame = cv2.imdecode(np_arr, cv2.IMREAD_COLOR)
-
     frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
     results = hands.process(frame_rgb)
 
@@ -58,5 +55,5 @@ def predict():
     return jsonify({'prediction': str(prediction[0])})
 
 if __name__ == '__main__':
-    # 0.0.0.0 makes it accessible on your local network
-    app.run(host='0.0.0.0', port=5000, debug=False)
+    port = int(__import__('os').environ.get('PORT', 5000))
+    app.run(host='0.0.0.0', port=port)
