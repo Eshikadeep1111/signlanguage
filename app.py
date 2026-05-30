@@ -4,10 +4,10 @@ from flask import Flask, render_template, request, jsonify
 from flask_cors import CORS
 import base64
 import os
-import mediapipe as mp
 
-# Fix for headless server - no display needed
+# Must set before importing mediapipe/cv2
 os.environ["MEDIAPIPE_DISABLE_GPU"] = "1"
+os.environ["MESA_GL_VERSION_OVERRIDE"] = "3.3"
 
 app = Flask(__name__)
 CORS(app)
@@ -16,6 +16,14 @@ model_dict = pickle.load(open('model.p', 'rb'))
 model = model_dict['model']
 
 MAX_LEN = 84
+
+def get_hands():
+    import mediapipe as mp
+    return mp.solutions.hands.Hands(
+        static_image_mode=True,
+        max_num_hands=2,
+        min_detection_confidence=0.3
+    )
 
 @app.route('/')
 def index():
@@ -32,14 +40,15 @@ def predict():
         img_data = base64.b64decode(data['image'].split(',')[1])
         np_arr = np.frombuffer(img_data, np.uint8)
         frame = cv2.imdecode(np_arr, cv2.IMREAD_COLOR)
+
+        if frame is None:
+            return jsonify({'error': 'Could not decode image'}), 400
+
         frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
 
-        with mp.solutions.hands.Hands(
-            static_image_mode=True,
-            max_num_hands=2,
-            min_detection_confidence=0.3
-        ) as hands:
-            results = hands.process(frame_rgb)
+        hands = get_hands()
+        results = hands.process(frame_rgb)
+        hands.close()
 
         if not results.multi_hand_landmarks:
             return jsonify({'prediction': None})
