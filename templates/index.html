@@ -87,12 +87,11 @@
     });
 
     async function sendLandmarks(multiHandLandmarks) {
-        // Flatten all landmarks into one list (max 2 hands = 42 points = 84 values)
+        // Use only first hand - matches single-hand training data
         let allLandmarks = [];
-        for (const hand of multiHandLandmarks) {
-            for (const lm of hand) {
-                allLandmarks.push({x: lm.x, y: lm.y});
-            }
+        const hand = multiHandLandmarks[0];
+        for (const lm of hand) {
+            allLandmarks.push({x: lm.x, y: lm.y});
         }
 
         try {
