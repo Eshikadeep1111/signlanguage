@@ -1,10 +1,10 @@
 import pickle
 import cv2
-import mediapipe as mp
 import numpy as np
 from flask import Flask, render_template, request, jsonify
 from flask_cors import CORS
 import base64
+import os
 
 app = Flask(__name__)
 CORS(app)
@@ -13,9 +13,22 @@ CORS(app)
 model_dict = pickle.load(open('model.p', 'rb'))
 model = model_dict['model']
 
-# New mediapipe API
-mp_hands = mp.solutions.hands
-hands = mp_hands.Hands(static_image_mode=True, max_num_hands=2, min_detection_confidence=0.3)
+# New mediapipe API (0.10.30+)
+import mediapipe as mp
+from mediapipe.tasks import python as mp_python
+from mediapipe.tasks.python import vision
+
+BaseOptions = mp.tasks.BaseOptions
+HandLandmarker = mp.tasks.vision.HandLandmarker
+HandLandmarkerOptions = mp.tasks.vision.HandLandmarkerOptions
+VisionRunningMode = mp.tasks.vision.RunningMode
+
+options = HandLandmarkerOptions(
+    base_options=BaseOptions(model_asset_path='hand_landmarker.task'),
+    running_mode=VisionRunningMode.IMAGE,
+    num_hands=2,
+    min_hand_detection_confidence=0.3
+)
 
 MAX_LEN = 84
 
@@ -33,16 +46,20 @@ def predict():
     np_arr = np.frombuffer(img_data, np.uint8)
     frame = cv2.imdecode(np_arr, cv2.IMREAD_COLOR)
     frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-    results = hands.process(frame_rgb)
 
-    if not results.multi_hand_landmarks:
+    mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=frame_rgb)
+
+    with HandLandmarker.create_from_options(options) as landmarker:
+        result = landmarker.detect(mp_image)
+
+    if not result.hand_landmarks:
         return jsonify({'prediction': None})
 
     data_aux = []
-    for hand_landmarks in results.multi_hand_landmarks:
-        x_ = [lm.x for lm in hand_landmarks.landmark]
-        y_ = [lm.y for lm in hand_landmarks.landmark]
-        for lm in hand_landmarks.landmark:
+    for hand in result.hand_landmarks:
+        x_ = [lm.x for lm in hand]
+        y_ = [lm.y for lm in hand]
+        for lm in hand:
             data_aux.append(lm.x - min(x_))
             data_aux.append(lm.y - min(y_))
 
@@ -55,5 +72,5 @@ def predict():
     return jsonify({'prediction': str(prediction[0])})
 
 if __name__ == '__main__':
-    port = int(__import__('os').environ.get('PORT', 5000))
+    port = int(os.environ.get('PORT', 5000))
     app.run(host='0.0.0.0', port=port)
